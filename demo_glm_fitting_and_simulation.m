@@ -21,9 +21,32 @@
 % All except the first (fminunc) are provided in the package that contains
 % this script.
 
-%% STEP 1: simulate data from Izhikevich neuron
+fid = pwd;    % root directory for project
+T = 10000;    % max time (in ms)
+jitter = 0;   % amount of jitter to add to spike times,
+              %   uniformly distributed over [-jitter,jitter], measured in ms
 
-cellType = 1; % type of Izhikevich neuron (numbered as in Izhikevich 2004)
+%%% basis functions for stimulus filter
+nkt = 100; % number of ms in stim filter
+kbasprs.neye = 0; % number of "identity" basis vectors near time of spike;
+kbasprs.ncos = 7; % number of raised-cosine vectors to use
+kbasprs.kpeaks = [.1 round(nkt/1.2)];  % position of first and last bump (relative to identity bumps)
+kbasprs.b = 10; % how nonlinear to make spacings (larger -> more linear)
+%%% basis functions for post-spike kernel
+ihbasprs.ncols = 7;  % number of basis vectors for post-spike kernel
+ihbasprs.hpeaks = [.1 100];  % peak location for first and last vectors, in ms
+ihbasprs.b = 10;  % how nonlinear to make spacings (larger -> more linear)
+ihbasprs.absref = 1; % absolute refractory period, in ms
+
+softRect = 0;    % use exponential nonlinearity
+plotFlag = 1;    % plot fit
+saveFlag = 1;    % save fit to fid, in new folder
+maxIter = 1000;  % max number of iterations for fitting, also used for maximum number of function evaluations(MaxFunEvals)
+tolFun = 1e-12;  % function tolerance for fitting
+L2pen = 0;       % penalty on L2-norm of parameter coefficients
+runs = 10;       % number of trials to simulate
+
+for cellType = 1 %; % type of Izhikevich neuron (numbered as in Izhikevich 2004)
 %   Choose from:
 %       1. tonic spiking
 %       2. phasic spiking
@@ -47,18 +70,18 @@ cellType = 1; % type of Izhikevich neuron (numbered as in Izhikevich 2004)
 %       20. inhibition-induced bursting
 %       21. bistability 2 (Not in original Izhikevich paper)
 
-plotFlag = 1; % plot simulated response
-saveFlag = 1; % save data to fid, in new folder
-fid = pwd;    % root directory for project
-T = 10000;    % max time (in ms)
+if any([10, 17] == cellType)
+    continue
+end
+
 if cellType == 7 || cellType == 8
     T = 20000;  % these behaviors use multiple step heights, so generate more data
 end
-jitter = 0;   % amount of jitter to add to spike times,
-              %   uniformly distributed over [-jitter,jitter], measured in ms
+
+%% STEP 1: simulate data from Izhikevich neuron
 
 [I, dt] = generate_izhikevich_stim(cellType,T);
-[v, u, spikes, cid] = simulate_izhikevich(cellType,I,dt,jitter,plotFlag,saveFlag,fid);
+[v, u, spikes, cid] = simulate_izhikevich(cellType,I,dt,jitter,plotFlag,saveFlag,fid); %saves automatically
 
 %% STEP 2: fit GLM
 
@@ -71,60 +94,60 @@ jitter = 0;   % amount of jitter to add to spike times,
 % simply changing the cell type above will not directly reproduce results
 % from the paper.
 
-
-%%% basis functions for stimulus filter
-nkt = 100; % number of ms in stim filter
-kbasprs.neye = 0; % number of "identity" basis vectors near time of spike;
-kbasprs.ncos = 7; % number of raised-cosine vectors to use
-kbasprs.kpeaks = [.1 round(nkt/1.2)];  % position of first and last bump (relative to identity bumps)
-kbasprs.b = 10; % how nonlinear to make spacings (larger -> more linear)
-%%% basis functions for post-spike kernel
-ihbasprs.ncols = 7;  % number of basis vectors for post-spike kernel
-ihbasprs.hpeaks = [.1 100];  % peak location for first and last vectors, in ms
-ihbasprs.b = 10;  % how nonlinear to make spacings (larger -> more linear)
-ihbasprs.absref = 1; % absolute refractory period, in ms
-
-softRect = 0;    % use exponential nonlinearity
-plotFlag = 1;    % plot fit
-saveFlag = 1;    % save fit to fid, in new folder
-maxIter = 1000;  % max number of iterations for fitting, also used for maximum number of function evaluations(MaxFunEvals)
-tolFun = 1e-12;  % function tolerance for fitting
-L2pen = 0;       % penalty on L2-norm of parameter coefficients
-
-[k, h, dc, prs, kbasis, hbasis] = fit_glm(I,spikes,dt,nkt,kbasprs,ihbasprs,[],softRect,plotFlag,maxIter,tolFun,L2pen);
-
-% save
 if saveFlag
-    if ~isdir([fid '/glm_fits'])
+    if ~isfolder([fid '/glm_fits'])
         mkdir(fid, 'glm_fits')
     end
     tag = '';
     if softRect
         tag = '_sr';
     end
-    save([fid '/glm_fits/' cid tag '_glmfit.mat'],'cellType','cid','dt','I','spikes','prs','kbasis','hbasis','softRect','maxIter','tolFun','L2pen','nkt','kbasprs','ihbasprs','k','h','dc')
-    disp(['saved: ' fid '/glm_fits/' cid tag '_glmfit.mat'])
+    fname = [fid '/glm_fits/' cid tag '_glmfit.mat'];
+else
+    fname = [];
+end
+
+if exist(fname, 'file')
+    disp(['Loading [' fname ']']);
+    load(fname)
+else
+    [k, h, dc, prs, kbasis, hbasis] = fit_glm(I,spikes,dt,nkt,kbasprs,ihbasprs,[],softRect,plotFlag,maxIter,tolFun,L2pen);
+    if saveFlag
+        save(fname,'cellType','cid','dt','I','spikes','prs','kbasis','hbasis','softRect','maxIter','tolFun','L2pen','nkt','kbasprs','ihbasprs','k','h','dc')
+        disp(['saved: ' fid '/glm_fits/' cid tag '_glmfit.mat'])
+    end
 end
 
 
 %% STEP 3: simulate responses of fit GLM
-
-plotFlag = 1; % plot simulated data
-saveFlag = 1; % save simulated data
-runs = 10;    % number of trials to simulate
-
-[y, stimcurr, hcurr, r] = simulate_glm(I,dt,k,h,dc,runs,softRect,plotFlag);
-
 if saveFlag
-    if ~isdir([fid '/glm_sim_data'])
+    if ~isfolder([fid '/glm_sim_data'])
         mkdir(fid, 'glm_sim_data')
     end
-    save([fid '/glm_sim_data/' cid tag '_glmdata.mat'],'y','stimcurr','hcurr','r')
-    disp(['saved: ' fid '/glm_sim_data/' cid tag '_glmdata.mat'])
+    fname = [fid '/glm_sim_data/' cid tag '_glmdata.mat'];
+else
+    fname = [];
 end
 
+if exist(fname, 'file')
+    [y, stimcurr, hcurr, r] = simulate_glm(I,dt,k,h,dc,runs,softRect,plotFlag);
+    save(fname,'y','stimcurr','hcurr','r')
+    disp(['saved: ' fid '/glm_sim_data/' cid tag '_glmdata.mat'])
+end
+end
+
+%%
+return
 
 %% STEP 4: compare responses from simulated GLM and original Izhikevich data
+cellType = 1
+fid = pwd;
+softRect = 0;
+jitter = 0;
 
-compare_glm_to_iz(cellType,fid,softRect,jitter)
-
+for cellType = 1:21
+    if any([10, 17] == cellType)
+        continue
+    end
+    compare_glm_to_iz(cellType,fid,softRect,jitter)
+end

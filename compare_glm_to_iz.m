@@ -43,6 +43,32 @@ if ~exist('jitter','var') || isempty(jitter)
     jitter = 0;
 end
 
+%% load cell str
+cellStrList = {
+    'tonic spiking', ...
+    'phasic spiking', ...
+    'tonic bursting', ...
+    'phasic bursting', ...
+    'mixed mode', ...
+    'spike frequency adaptation', ...
+    'Class 1', ...
+    'Class 2', ...
+    'spike latency', ...
+    'subthreshold oscillations', ...
+    'resonator', ...
+    'integrator', ...
+    'rebound spike', ...
+    'rebound burst', ...
+    'threshold variability', ...
+    'bistability 1', ...
+    'depolarizing after-potential', ...
+    'accomodation', ...
+    'inhibition-induced spiking', ...
+    'inhibition-induced bursting', ...
+    'bistability 2', ...
+};
+
+cellStr = cellStrList{cellType};
 
 %% plot GLM simulation results against Izhikevich data
 
@@ -69,7 +95,6 @@ Ts = [400 1100;
     525 725;
     100 1000;
     100 10000];
-
 
 %% load simulated data
 cids = {'RS' 'PS' 'TB' 'PB' 'MM' 'FA' 'E1' 'E2' 'SL' 'SO' 'R' 'I' 'ES' 'EB' 'TV' 'B' 'DA' 'A' 'IS' 'IB' 'B2' 'RS2' 'SP'};
@@ -101,10 +126,58 @@ axisWidth = 1;
 izColor = [0 0 0];
 glmColor = [.5 .5 .5];
 
+if minT == 0
+    minT = 1;
+end
+minT = minT/dt;
+maxT = maxT/dt;
 
-%%% plot filters
+tIdx = minT:maxT;
+t = (tIdx-minT)*dt;
 
-f=figure;
+%% plot filters
+
+fig = figure(9123); clf;
+subplot(5,2,9); hold all;
+plot([0 length(k)],[0 0],'k','linewidth',1.5);
+plot(length(k) * [1, 1], [min(k), max(k)], 'k','linewidth',1.5);
+plot(k,'linewidth',2, 'Color', [0, 0.2, 0.8]);
+set(gca, 'XTick', [], 'YTick', [], 'box', 'off');
+
+subplot(5,2,10);  hold all;
+plot([0 length(h)],[0 0],'k','linewidth',1.5);
+plot(0 * [1, 1], [min(h), max(h)], 'k','linewidth',1.5);
+plot(h(2:end),'r','linewidth',2, 'Color', [0.7, 0.1, 0.1]);
+set(gca, 'XTick', [], 'YTick', [], 'box', 'off');
+
+subplot(5,2,1:8);  hold all;
+th = text((max(t)-min(t))/2, 1.5, cellStr);
+set(th, 'FontSize', 12, 'HorizontalAlignment', 'center')
+I = I - min(I);
+plot(t,1 + I(tIdx)/max(I(tIdx))*0.3,'linewidth',2)
+%ylim([min(I(tIdx))-.05*abs(min(I(tIdx))) max(I(tIdx))+.05*abs(max(I(tIdx)))])
+vz = v(tIdx)-min(v(tIdx));
+plot(t,0.1+vz/max(vz)*0.7,'color',izColor,'linewidth',1.5)
+%ylim([min(v(tIdx))*1.05 max(v(tIdx))]*1.05)
+
+xlim([min(t) max(t)])
+ylim([-1, 1.5]);
+
+spikeHeight = .7;
+for i = 1:5 %size(y,2) % for each run of glm simulation
+    spt = find(y(tIdx,i));
+    for spikeNum = 1:length(spt)
+        plot([spt(spikeNum)*dt spt(spikeNum)*dt],[i-.5 i-.5+spikeHeight]/5-1,'color',glmColor,'linewidth',1.25)
+    end
+end
+set(gca, 'XTick', [], 'YTick', [], 'box', 'off');
+
+set(fig, 'PaperSize', [3, 3], 'PaperPosition', [0, 0, 3, 3]);
+saveas(fig, sprintf('%02d_%s.pdf', cellType, cid));
+
+return;
+
+%%
 
 subplot('position',[.72+spacing/2 .5+spacing/2 .25-spacing .35-spacing]); hold on;
 h1 = gca;
